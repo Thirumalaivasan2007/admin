@@ -10,17 +10,21 @@ const AdminLogin = ({ onLoginSuccess }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
 
+    const API_BASE_URL = window.location.hostname === 'localhost'
+        ? 'http://localhost:5001/api'
+        : 'https://zylron-agent-ai.onrender.com/api';
+
     const handleLoginSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
         setError('');
 
         try {
-            const response = await axios.post('https://zylron-agent-ai.onrender.com/api/auth/login', { email, password });
+            const response = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
             
             if (response.data && response.data.requires2FA) {
                 // Trigger OTP
-                await axios.post('https://zylron-agent-ai.onrender.com/api/auth/send-otp', { email, type: 'login' });
+                await axios.post(`${API_BASE_URL}/auth/send-otp`, { email, type: 'login' });
                 setStep('otp');
             } else if (response.data.token) {
                 localStorage.setItem('user', JSON.stringify(response.data));
@@ -39,10 +43,10 @@ const AdminLogin = ({ onLoginSuccess }) => {
         setError('');
 
         try {
-            const verifyRes = await axios.post('https://zylron-agent-ai.onrender.com/api/auth/verify-otp', { email, otp });
+            const verifyRes = await axios.post(`${API_BASE_URL}/auth/verify-otp`, { email, otp });
             
             if (verifyRes.data && verifyRes.data.success) {
-                const finalRes = await axios.post('https://zylron-agent-ai.onrender.com/api/auth/login-verify', { email });
+                const finalRes = await axios.post(`${API_BASE_URL}/auth/login-verify`, { email });
                 if (finalRes.data && finalRes.data.token) {
                     localStorage.setItem('user', JSON.stringify(finalRes.data));
                     onLoginSuccess();

@@ -319,7 +319,13 @@ const AdminDashboard = () => {
           ))}
         </nav>
 
-        <button style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer' }}>
+        <button 
+          onClick={() => {
+            localStorage.removeItem('user');
+            setIsLoggedIn(false);
+          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer' }}
+        >
           <LogOut size={20} />
           Sign Out
         </button>
