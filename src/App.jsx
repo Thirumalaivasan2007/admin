@@ -16,7 +16,13 @@ import {
   Check,
   X,
   Plus,
-  CreditCard
+  CreditCard,
+  AlertTriangle,
+  Brain,
+  Clock,
+  ToggleLeft,
+  ToggleRight,
+  TrendingDown
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { adminServices } from './services/adminApi';
@@ -31,6 +37,11 @@ const AdminDashboard = () => {
   const [logs, setLogs] = useState([]);
   const [tickets, setTickets] = useState([]);
   const [selectedUserIdForAnalytics, setSelectedUserIdForAnalytics] = useState(null);
+  const [crashLogs, setCrashLogs] = useState([]);
+  const [recallEvents, setRecallEvents] = useState([]);
+  const [recallUserId, setRecallUserId] = useState(null);
+  const [featureFlags, setFeatureFlags] = useState([]);
+  const [churnUsers, setChurnUsers] = useState([]);
   
   // Broadcast states
   const [broadcastSubject, setBroadcastSubject] = useState('');
@@ -48,16 +59,18 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [statsRes, usersRes, logsRes, ticketsRes] = await Promise.all([
+      const [statsRes, usersRes, logsRes, ticketsRes, crashRes] = await Promise.all([
         adminServices.getStats(),
         adminServices.getUsers(),
         adminServices.getLogs(),
-        adminServices.getTickets().catch(err => ({ data: [] }))
+        adminServices.getTickets().catch(() => ({ data: [] })),
+        adminServices.getCrashLogs().catch(() => ({ data: [] }))
       ]);
       setStatsData(statsRes.data);
       setUsers(usersRes.data);
       setLogs(logsRes.data);
       setTickets(ticketsRes.data);
+      setCrashLogs(crashRes.data);
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
@@ -164,12 +177,16 @@ const AdminDashboard = () => {
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
           {[
-            { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+                      { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'users', label: 'User Nodes', icon: Users },
             { id: 'tickets', label: 'Support Tickets', icon: MessageSquare },
             { id: 'broadcast', label: 'Broadcast Node', icon: Megaphone },
             { id: 'security', label: 'Security Logs', icon: ShieldAlert },
             { id: 'omni', label: 'Omni-Vision', icon: Activity },
+            { id: 'autodevops', label: 'Auto-DevOps AI', icon: AlertTriangle },
+            { id: 'recall', label: 'OS Recall (God Eye)', icon: Brain },
+            { id: 'flags', label: 'Feature Flags', icon: ToggleLeft },
+            { id: 'churn', label: 'Churn Oracle', icon: TrendingDown },
             { id: 'devops', label: 'DevOps Node', icon: ShieldAlert },
             { id: 'proxy', label: 'Proxy Health', icon: Mail },
             { id: 'settings', label: 'Core Settings', icon: Settings },
@@ -470,6 +487,183 @@ const AdminDashboard = () => {
                     <div style={{ color: log.status === 'success' ? 'var(--secondary)' : 'var(--danger)', fontSize: '12px' }}>{log.status.toUpperCase()}</div>
                     <div style={{ fontSize: '14px' }}>{log.message} <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>({log.target})</span></div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'right' }}>{new Date(log.createdAt).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'autodevops' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertTriangle size={20} style={{ color: '#f59e0b' }} />
+                🛠️ Auto-DevOps — Self-Healing Crash Log
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '25px' }}>When the Zylron backend crashes, this panel captures the error and the AI-generated fix.</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                {crashLogs.length === 0 && (
+                  <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>✅ No crashes detected. Zylron systems are perfectly stable.</div>
+                )}
+                {crashLogs.map((log, i) => (
+                  <div key={i} style={{ padding: '20px', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '15px' }}>
+                      <div>
+                        <div style={{ fontWeight: 'bold', color: 'var(--danger)', fontSize: '15px' }}>💥 {log.errorName}</div>
+                        <div style={{ color: 'var(--text-main)', fontSize: '13px', marginTop: '4px' }}>{log.errorMessage}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', background: log.status === 'FIX_GENERATED' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: log.status === 'FIX_GENERATED' ? 'var(--secondary)' : 'var(--danger)', border: '1px solid currentColor', fontWeight: 'bold' }}>{log.status}</span>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>{new Date(log.createdAt).toLocaleString()}</div>
+                      </div>
+                    </div>
+                    <details style={{ marginBottom: '12px' }}>
+                      <summary style={{ cursor: 'pointer', color: 'var(--danger)', fontSize: '12px', fontWeight: 'bold' }}>📋 Stack Trace</summary>
+                      <pre style={{ marginTop: '8px', padding: '12px', background: 'rgba(0,0,0,0.5)', borderRadius: '8px', fontSize: '11px', color: '#f87171', overflowX: 'auto', whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{log.stackTrace}</pre>
+                    </details>
+                    {log.aiProposedFix && (
+                      <div style={{ padding: '15px', background: 'rgba(16, 185, 129, 0.05)', border: '1px solid rgba(16, 185, 129, 0.2)', borderRadius: '10px' }}>
+                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--secondary)', marginBottom: '8px' }}>🤖 Zylron AI Proposed Fix:</div>
+                        <div style={{ fontSize: '13px', color: 'var(--text-main)', whiteSpace: 'pre-wrap', lineHeight: '1.7' }}>{log.aiProposedFix}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'recall' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Brain size={20} style={{ color: 'var(--primary)' }} />
+                🧠 OS-Level Recall — God's Eye Timeline
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '25px' }}>Select a user to view their complete footprint inside Zylron.</p>
+              <div style={{ display: 'flex', gap: '15px', marginBottom: '25px', flexWrap: 'wrap' }}>
+                {users.map(u => (
+                  <button
+                    key={u._id}
+                    onClick={async () => {
+                      setRecallUserId(u._id);
+                      const res = await adminServices.getUserRecall(u._id).catch(() => ({ data: [] }));
+                      setRecallEvents(res.data);
+                    }}
+                    style={{
+                      padding: '8px 16px', borderRadius: '20px', border: '1px solid',
+                      borderColor: recallUserId === u._id ? 'var(--primary)' : 'var(--border)',
+                      background: recallUserId === u._id ? 'rgba(6,182,212,0.1)' : 'transparent',
+                      color: recallUserId === u._id ? 'var(--primary)' : 'var(--text-muted)',
+                      cursor: 'pointer', fontSize: '13px', fontWeight: '600', transition: 'all 0.2s'
+                    }}
+                  >{u.name}</button>
+                ))}
+              </div>
+              {recallUserId && (
+                <div style={{ position: 'relative', paddingLeft: '20px' }}>
+                  <div style={{ position: 'absolute', left: '6px', top: 0, bottom: 0, width: '2px', background: 'rgba(6,182,212,0.2)', borderRadius: '1px' }} />
+                  {recallEvents.length === 0 && <p style={{ color: 'var(--text-muted)', padding: '20px 0' }}>No recall events tracked for this user yet.</p>}
+                  {recallEvents.map((ev, i) => (
+                    <div key={i} style={{ display: 'flex', gap: '15px', marginBottom: '14px', alignItems: 'flex-start', position: 'relative' }}>
+                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--primary)', marginTop: '4px', flexShrink: 0, boxShadow: '0 0 8px var(--primary)' }} />
+                      <div style={{ flex: 1, padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: '10px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', color: 'var(--primary)', letterSpacing: '0.1em' }}>{ev.actionType}</span>
+                          <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={10} />{new Date(ev.createdAt).toLocaleString()}</span>
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                          {ev.metadata?.page && <span>📄 {ev.metadata.page} </span>}
+                          {ev.metadata?.element && <span>🖱️ {ev.metadata.element} </span>}
+                          {ev.metadata?.detail && <span>💬 {ev.metadata.detail}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeTab === 'flags' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ToggleLeft size={20} style={{ color: 'var(--primary)' }} />
+                🎛️ Remote Feature Flags — God's Remote
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '25px' }}>
+                Toggle live features on/off without redeploying. Changes take effect on the next user session.
+              </p>
+              <button
+                onClick={async () => {
+                  const res = await adminServices.getFeatureFlags().catch(() => ({ data: [] }));
+                  setFeatureFlags(Array.isArray(res.data) ? res.data : []);
+                }}
+                style={{ marginBottom: '20px', background: 'var(--primary)', color: '#000', border: 'none', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+              >
+                Load Feature Flags
+              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {featureFlags.length === 0 && (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>Click "Load Feature Flags" to view flags.</p>
+                )}
+                {featureFlags.map((flag) => (
+                  <div key={flag._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '18px 20px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                    <div>
+                      <div style={{ fontWeight: '600', fontSize: '15px', marginBottom: '4px' }}>{flag.label}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{flag.description} · Key: <code style={{ color: 'var(--primary)' }}>{flag.key}</code></div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        await adminServices.toggleFeatureFlag(flag._id).catch(() => {});
+                        const res = await adminServices.getFeatureFlags().catch(() => ({ data: [] }));
+                        setFeatureFlags(Array.isArray(res.data) ? res.data : []);
+                      }}
+                      style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px',
+                        color: flag.enabled ? 'var(--secondary)' : 'var(--danger)', fontWeight: 'bold', fontSize: '13px'
+                      }}
+                    >
+                      {flag.enabled ? <ToggleRight size={32} style={{ color: 'var(--secondary)' }} /> : <ToggleLeft size={32} style={{ color: 'var(--danger)' }} />}
+                      {flag.enabled ? 'ENABLED' : 'DISABLED'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'churn' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingDown size={20} style={{ color: '#f59e0b' }} />
+                🧠 Churn Oracle — AI Risk Prediction
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '25px' }}>
+                Users flagged as "High Risk" by the Oracle Engine (inactive 3+ days). Re-engagement emails are auto-sent.
+              </p>
+              <button
+                onClick={async () => {
+                  const res = await adminServices.getLogs().catch(() => ({ data: [] }));
+                  const churnLogs = res.data.filter(l => l.message && l.message.includes('HIGH RISK CHURN'));
+                  setChurnUsers(churnLogs);
+                }}
+                style={{ marginBottom: '20px', background: '#f59e0b', color: '#000', border: 'none', padding: '8px 20px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+              >
+                🔍 Run Oracle Scan
+              </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {churnUsers.length === 0 && (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '30px 0' }}>Click "Run Oracle Scan" to identify at-risk users.</p>
+                )}
+                {churnUsers.map((log, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 20px', background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245, 158, 11, 0.2)', borderRadius: '12px' }}>
+                    <div>
+                      <div style={{ color: '#f59e0b', fontWeight: '600', fontSize: '14px' }}>⚠️ HIGH RISK CHURN</div>
+                      <div style={{ fontSize: '13px', marginTop: '4px' }}>{log.target}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{new Date(log.createdAt).toLocaleString()}</div>
+                    </div>
+                    <span style={{ padding: '4px 12px', background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' }}>
+                      Re-engagement Sent ✓
+                    </span>
                   </div>
                 ))}
               </div>

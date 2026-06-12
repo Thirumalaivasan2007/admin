@@ -1,10 +1,14 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://zylron-agent-ai.onrender.com/api/admin';
+const API_BASE_URL = 'https://zylron-agent-ai.onrender.com/api';
+const ADMIN_API_URL = API_BASE_URL + '/admin';
 
-const adminApi = axios.create({
-    baseURL: API_BASE_URL,
-});
+const getAuthHeader = () => {
+    const user = JSON.parse(localStorage.getItem('user'));
+    return user?.token ? { Authorization: `Bearer ${user.token}` } : {};
+};
+
+const adminApi = axios.create({ baseURL: ADMIN_API_URL });
 
 // Interceptor to add Admin Token
 adminApi.interceptors.request.use((config) => {
@@ -12,6 +16,13 @@ adminApi.interceptors.request.use((config) => {
     if (user && user.token) {
         config.headers.Authorization = `Bearer ${user.token}`;
     }
+    return config;
+});
+
+// Separate public API client (for non-admin routes)
+const publicApi = axios.create({ baseURL: API_BASE_URL });
+publicApi.interceptors.request.use((config) => {
+    config.headers = { ...config.headers, ...getAuthHeader() };
     return config;
 });
 
@@ -25,6 +36,11 @@ export const adminServices = {
     broadcastMessage: (subject, htmlContent) => adminApi.post('/broadcast', { subject, htmlContent }),
     getUserAnalytics: (id) => adminApi.get(`/users/${id}/analytics`),
     toggleApiKeyStatus: (id) => adminApi.put(`/api-keys/${id}/toggle`),
+    getCrashLogs: () => adminApi.get('/crash-logs'),
+    getUserRecall: (id) => adminApi.get(`/users/${id}/recall`),
+    // Feature Flags (use public API — /api/flags/admin)
+    getFeatureFlags: () => publicApi.get('/flags/admin'),
+    toggleFeatureFlag: (id) => publicApi.put(`/flags/${id}/toggle`),
 };
 
 export default adminApi;
