@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import { 
   LayoutDashboard, 
   Users, 
@@ -55,6 +56,51 @@ const AdminDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [spotifyEnabled, setSpotifyEnabled] = useState(true);
   const [calendarEnabled, setCalendarEnabled] = useState(true);
+
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
+
+    const socketUrl = window.location.hostname === 'localhost' ? 'http://localhost:5001' : 'https://zylron-agent-ai.onrender.com';
+    console.log(`📡 Connecting to Live Telemetry Room at ${socketUrl}...`);
+    
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling']
+    });
+
+    socket.on('connect', () => {
+      console.log('📡 Live Telemetry Socket Connected!');
+      setIsSocketConnected(true);
+      socket.emit('join_admin');
+    });
+
+    socket.on('disconnect', () => {
+      console.log('📡 Live Telemetry Socket Disconnected');
+      setIsSocketConnected(false);
+    });
+
+    socket.on('live_log', (newLog) => {
+      console.log('📡 Socket: Live Log Received:', newLog);
+      setLogs(prev => [newLog, ...prev]);
+    });
+
+    socket.on('live_crash', (newCrash) => {
+      console.log('📡 Socket: Live Crash Received:', newCrash);
+      setCrashLogs(prev => [newCrash, ...prev]);
+    });
+
+    socket.on('telemetry_alert', (data) => {
+      console.log('📡 Socket: Live Alert Received:', data);
+      if (data.log) {
+        setLogs(prev => [data.log, ...prev]);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [isLoggedIn]);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -172,7 +218,22 @@ const AdminDashboard = () => {
       <aside style={{ width: '280px', borderRight: '1px solid var(--border)', padding: '30px', display: 'flex', flexDirection: 'column', gap: '40px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <div style={{ width: '40px', height: '40px', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', borderRadius: '10px' }}></div>
-          <h1 style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '1px' }}>ZYLRON <span className="cyan-glow">ADMIN</span></h1>
+          <div>
+            <h1 style={{ fontSize: '20px', fontWeight: 'bold', letterSpacing: '1px' }}>ZYLRON <span className="cyan-glow">ADMIN</span></h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
+              <span className={`pulse-dot ${isSocketConnected ? 'online' : 'offline'}`} style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                background: isSocketConnected ? '#10b981' : '#ef4444',
+                boxShadow: isSocketConnected ? '0 0 8px #10b981' : '0 0 8px #ef4444',
+                display: 'inline-block'
+              }}></span>
+              <span style={{ fontSize: '9px', color: 'var(--text-muted)', fontWeight: 'bold', letterSpacing: '0.5px' }}>
+                {isSocketConnected ? 'TELEMETRY LIVE' : 'OFFLINE'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <nav style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1 }}>
