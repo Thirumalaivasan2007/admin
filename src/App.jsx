@@ -15,7 +15,8 @@ import {
   Megaphone,
   Check,
   X,
-  Plus
+  Plus,
+  CreditCard
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { adminServices } from './services/adminApi';
@@ -143,9 +144,9 @@ const AdminDashboard = () => {
 
   const stats = [
     { label: 'Total Intelligence', value: statsData.totalUsers, icon: Users, color: 'var(--primary)' },
-    { label: 'Neural Uplinks', value: statsData.totalEmails, icon: Activity, color: 'var(--secondary)' },
-    { label: 'Failed Dispatches', value: statsData.failedEmails, icon: ShieldAlert, color: 'var(--danger)' },
-    { label: 'Security Events', value: statsData.loginAttempts, icon: Mail, color: '#f59e0b' },
+    { label: 'Pro Subscriptions', value: statsData.proUsers || 0, icon: Activity, color: 'var(--secondary)' },
+    { label: 'Total Revenue (INR)', value: `₹${(statsData.totalRevenue || 0).toLocaleString()}`, icon: CreditCard, color: '#10b981' },
+    { label: 'Security Events', value: statsData.loginAttempts, icon: ShieldAlert, color: 'var(--danger)' },
   ];
 
   if (!isLoggedIn) {
