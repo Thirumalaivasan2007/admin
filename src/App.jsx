@@ -10,11 +10,17 @@ import {
   Bell,
   Mail,
   ExternalLink,
-  RefreshCcw
+  RefreshCcw,
+  MessageSquare,
+  Megaphone,
+  Check,
+  X,
+  Plus
 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { adminServices } from './services/adminApi';
 import AdminLogin from './components/AdminLogin';
+import UserAnalyticsModal from './components/UserAnalyticsModal';
 
 const AdminDashboard = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('user'));
@@ -22,6 +28,18 @@ const AdminDashboard = () => {
   const [statsData, setStatsData] = useState({ totalUsers: 0, totalEmails: 0, failedEmails: 0, loginAttempts: 0 });
   const [users, setUsers] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [tickets, setTickets] = useState([]);
+  const [selectedUserIdForAnalytics, setSelectedUserIdForAnalytics] = useState(null);
+  
+  // Broadcast states
+  const [broadcastSubject, setBroadcastSubject] = useState('');
+  const [broadcastHtml, setBroadcastHtml] = useState('');
+  const [isBroadcasting, setIsBroadcasting] = useState(false);
+  const [broadcastStatus, setBroadcastStatus] = useState('');
+  
+  // Ticket resolve states
+  const [resolvingTicketId, setResolvingTicketId] = useState(null);
+
   const [isLoading, setIsLoading] = useState(true);
   const [spotifyEnabled, setSpotifyEnabled] = useState(true);
   const [calendarEnabled, setCalendarEnabled] = useState(true);
@@ -29,18 +47,90 @@ const AdminDashboard = () => {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [statsRes, usersRes, logsRes] = await Promise.all([
+      const [statsRes, usersRes, logsRes, ticketsRes] = await Promise.all([
         adminServices.getStats(),
         adminServices.getUsers(),
-        adminServices.getLogs()
+        adminServices.getLogs(),
+        adminServices.getTickets().catch(err => ({ data: [] }))
       ]);
       setStatsData(statsRes.data);
       setUsers(usersRes.data);
       setLogs(logsRes.data);
+      setTickets(ticketsRes.data);
     } catch (error) {
       console.error('Error fetching admin data:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResolveTicket = async (ticketId) => {
+    setResolvingTicketId(ticketId);
+    try {
+      await adminServices.resolveTicket(ticketId);
+      // Refresh tickets list
+      const response = await adminServices.getTickets();
+      setTickets(response.data);
+      
+      // Refresh logs
+      const logsRes = await adminServices.getLogs();
+      setLogs(logsRes.data);
+      
+      alert("✅ Support Ticket resolved and user has been notified via automatic email!");
+    } catch (error) {
+      console.error('Error resolving ticket:', error);
+      alert(error.response?.data?.message || 'Failed to resolve ticket.');
+    } finally {
+      setResolvingTicketId(null);
+    }
+  };
+
+  const handleBroadcast = async (e) => {
+    e.preventDefault();
+    if (!broadcastSubject.trim() || !broadcastHtml.trim()) {
+      alert("Please fill in both the Subject and HTML Content for the broadcast.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to broadcast this campaign to all active users?`)) {
+      return;
+    }
+    setIsBroadcasting(true);
+    setBroadcastStatus('Initiating broadcast campaign...');
+    try {
+      await adminServices.broadcastMessage(broadcastSubject, broadcastHtml);
+      setBroadcastStatus('Broadcast campaign launched successfully!');
+      setBroadcastSubject('');
+      setBroadcastHtml('');
+      
+      // Refresh stats/logs
+      fetchData();
+      setTimeout(() => setBroadcastStatus(''), 4000);
+    } catch (error) {
+      console.error('Broadcast failed:', error);
+      setBroadcastStatus('Error launching campaign: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setIsBroadcasting(false);
+    }
+  };
+
+  const handleToggleBan = async (userId) => {
+    try {
+      const response = await adminServices.toggleBanUser(userId);
+      // Update local users list status
+      setUsers(prevUsers => prevUsers.map(u => 
+        u._id === userId ? { ...u, isBanned: response.data.user.isBanned } : u
+      ));
+      
+      // Update Stats & Logs
+      const [statsRes, logsRes] = await Promise.all([
+        adminServices.getStats(),
+        adminServices.getLogs()
+      ]);
+      setStatsData(statsRes.data);
+      setLogs(logsRes.data);
+    } catch (error) {
+      console.error('Error toggling ban status:', error);
+      alert(error.response?.data?.message || 'Failed to toggle ban status');
     }
   };
 
@@ -75,6 +165,8 @@ const AdminDashboard = () => {
           {[
             { id: 'overview', label: 'Overview', icon: LayoutDashboard },
             { id: 'users', label: 'User Nodes', icon: Users },
+            { id: 'tickets', label: 'Support Tickets', icon: MessageSquare },
+            { id: 'broadcast', label: 'Broadcast Node', icon: Megaphone },
             { id: 'security', label: 'Security Logs', icon: ShieldAlert },
             { id: 'omni', label: 'Omni-Vision', icon: Activity },
             { id: 'devops', label: 'DevOps Node', icon: ShieldAlert },
@@ -190,8 +282,22 @@ const AdminDashboard = () => {
                   </thead>
                   <tbody>
                     {users.slice(0, 5).map((user, i) => (
-                      <tr key={i} style={{ borderBottom: '1px solid var(--border)', fontSize: '14px' }}>
-                        <td style={{ padding: '20px 0', fontWeight: '500' }}>{user.name}</td>
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border)', fontSize: '14px', opacity: user.isBanned ? 0.6 : 1 }}>
+                        <td style={{ padding: '20px 0', fontWeight: '500' }}>
+                          <button 
+                            onClick={() => setSelectedUserIdForAnalytics(user._id)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--primary)', fontWeight: '500', cursor: 'pointer', padding: 0, textDecoration: 'none', textAlign: 'left', fontSize: '14px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                          >
+                            {user.name}
+                          </button>
+                          {user.isBanned && (
+                            <span style={{ color: 'var(--danger)', fontSize: '10px', marginLeft: '8px', fontWeight: 'bold', border: '1px solid var(--danger)', padding: '1px 6px', borderRadius: '4px', background: 'rgba(239, 68, 68, 0.1)' }}>
+                              BANNED
+                            </span>
+                          )}
+                        </td>
                         <td>
                           <span style={{ 
                             padding: '4px 10px', 
@@ -239,32 +345,115 @@ const AdminDashboard = () => {
                     <th style={{ padding: '15px 0' }}>NAME</th>
                     <th>EMAIL</th>
                     <th>ROLE</th>
+                    <th>STATUS</th>
                     <th>ACCOUNT CREATED</th>
                     <th>ACTION</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border)', fontSize: '14px' }}>
-                      <td style={{ padding: '20px 0', fontWeight: '600' }}>{user.name}</td>
-                      <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
-                      <td>
-                        <span style={{ 
-                          padding: '4px 12px', 
-                          borderRadius: '20px', 
-                          fontSize: '11px', 
-                          background: user.role === 'admin' ? 'rgba(6, 182, 212, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                          color: user.role === 'admin' ? 'var(--primary)' : 'var(--secondary)'
-                        }}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td style={{ color: 'var(--text-muted)' }}>{new Date(user.createdAt).toLocaleString()}</td>
-                      <td>
-                        <button style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-main)', padding: '5px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '12px' }}>Manage</button>
-                      </td>
-                    </tr>
-                  ))}
+                  {users.map((user, i) => {
+                    const currentUser = JSON.parse(localStorage.getItem('user'));
+                    const isSelf = user._id === currentUser?.id || user._id === currentUser?._id;
+                    
+                    return (
+                      <tr key={i} style={{ borderBottom: '1px solid var(--border)', fontSize: '14px', opacity: user.isBanned ? 0.75 : 1 }}>
+                        <td style={{ padding: '20px 0', fontWeight: '600' }}>
+                          <button 
+                            onClick={() => setSelectedUserIdForAnalytics(user._id)}
+                            style={{ background: 'transparent', border: 'none', color: 'var(--primary)', fontWeight: '600', cursor: 'pointer', padding: 0, textDecoration: 'none', textAlign: 'left', fontSize: '14px' }}
+                            onMouseEnter={(e) => e.currentTarget.style.textDecoration = 'underline'}
+                            onMouseLeave={(e) => e.currentTarget.style.textDecoration = 'none'}
+                          >
+                            {user.name}
+                          </button>
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{user.email}</td>
+                        <td>
+                          <span style={{ 
+                            padding: '4px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '11px', 
+                            background: user.role === 'admin' ? 'rgba(6, 182, 212, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                            color: user.role === 'admin' ? 'var(--primary)' : 'var(--secondary)'
+                          }}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{ 
+                            padding: '4px 12px', 
+                            borderRadius: '20px', 
+                            fontSize: '11px', 
+                            background: user.isBanned ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                            color: user.isBanned ? 'var(--danger)' : 'var(--secondary)',
+                            border: user.isBanned ? '1px solid rgba(239, 68, 68, 0.2)' : '1px solid rgba(16, 185, 129, 0.2)',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px'
+                          }}>
+                            <span style={{
+                              width: '6px',
+                              height: '6px',
+                              borderRadius: '50%',
+                              background: user.isBanned ? 'var(--danger)' : 'var(--secondary)'
+                            }}></span>
+                            {user.isBanned ? 'SUSPENDED' : 'OPERATIONAL'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--text-muted)' }}>{new Date(user.createdAt).toLocaleString()}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                            <button
+                              onClick={() => setSelectedUserIdForAnalytics(user._id)}
+                              style={{
+                                background: 'transparent',
+                                border: '1px solid var(--primary)',
+                                color: 'var(--primary)',
+                                padding: '5px 12px',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(6, 182, 212, 0.1)'}
+                              onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              Analytics
+                            </button>
+                            {isSelf ? (
+                              <span style={{ fontSize: '12px', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                                Active Admin
+                              </span>
+                            ) : (
+                              <button 
+                                onClick={() => handleToggleBan(user._id)}
+                                style={{ 
+                                  background: 'transparent', 
+                                  border: `1px solid ${user.isBanned ? 'var(--secondary)' : 'var(--danger)'}`, 
+                                  color: user.isBanned ? 'var(--secondary)' : 'var(--danger)', 
+                                  padding: '5px 12px', 
+                                  borderRadius: '8px', 
+                                  cursor: 'pointer', 
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onMouseEnter={(e) => {
+                                  e.currentTarget.style.background = user.isBanned ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.currentTarget.style.background = 'transparent';
+                                }}
+                              >
+                                {user.isBanned ? 'Unban Node' : 'Kill Switch'}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </section>
@@ -425,8 +614,222 @@ const AdminDashboard = () => {
               </div>
             </section>
           )}
+
+          {activeTab === 'tickets' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '25px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <MessageSquare size={20} style={{ color: 'var(--primary)' }} />
+                Support Tickets & Resolution Console
+              </h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '13px' }}>
+                    <th style={{ padding: '15px 0' }}>USER</th>
+                    <th>CATEGORY</th>
+                    <th>MESSAGE</th>
+                    <th>STATUS</th>
+                    <th>CREATED AT</th>
+                    <th>ACTION</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickets.map((ticket, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid var(--border)', fontSize: '14px', opacity: ticket.status === 'resolved' ? 0.6 : 1 }}>
+                      <td style={{ padding: '20px 0', fontWeight: '500' }}>
+                        <div>{ticket.userId?.name || 'Unknown Node'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{ticket.userId?.email || 'N/A'}</div>
+                      </td>
+                      <td>
+                        <span style={{ 
+                          padding: '3px 8px', 
+                          borderRadius: '8px', 
+                          fontSize: '11px', 
+                          fontWeight: 'bold',
+                          background: 'rgba(6, 182, 212, 0.1)', 
+                          color: 'var(--primary)',
+                          border: '1px solid rgba(6, 182, 212, 0.2)'
+                        }}>
+                          {ticket.category.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-main)', maxWidth: '280px', wordBreak: 'break-word', paddingRight: '15px' }}>{ticket.message}</td>
+                      <td>
+                        <span style={{ 
+                          padding: '4px 12px', 
+                          borderRadius: '20px', 
+                          fontSize: '11px', 
+                          background: ticket.status === 'resolved' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                          color: ticket.status === 'resolved' ? 'var(--secondary)' : 'var(--danger)',
+                          border: ticket.status === 'resolved' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          <span style={{
+                            width: '6px',
+                            height: '6px',
+                            borderRadius: '50%',
+                            background: ticket.status === 'resolved' ? 'var(--secondary)' : 'var(--danger)'
+                          }}></span>
+                          {ticket.status.toUpperCase()}
+                        </span>
+                      </td>
+                      <td style={{ color: 'var(--text-muted)' }}>{new Date(ticket.createdAt).toLocaleString()}</td>
+                      <td>
+                        {ticket.status !== 'resolved' ? (
+                          <button 
+                            disabled={resolvingTicketId === ticket._id}
+                            onClick={() => handleResolveTicket(ticket._id)}
+                            style={{ 
+                              background: 'transparent', 
+                              border: '1px solid var(--secondary)', 
+                              color: 'var(--secondary)', 
+                              padding: '5px 12px', 
+                              borderRadius: '8px', 
+                              cursor: 'pointer', 
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              transition: 'all 0.2s ease'
+                            }}
+                            onMouseEnter={(e) => {
+                              if (resolvingTicketId !== ticket._id) e.currentTarget.style.background = 'rgba(16, 185, 129, 0.1)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            {resolvingTicketId === ticket._id ? 'Resolving...' : 'Resolve Ticket'}
+                          </button>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: 'var(--secondary)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <Check size={14} /> User Notified
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {tickets.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        No support tickets submitted yet. Core systems are optimal.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </section>
+          )}
+
+          {activeTab === 'broadcast' && (
+            <section className="glass-card animate-fade-in" style={{ padding: '30px' }}>
+              <h3 style={{ fontSize: '18px', marginBottom: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Megaphone size={20} style={{ color: 'var(--primary)' }} />
+                Global Broadcast Campaign Engine
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '25px' }}>
+                Write and dispatch secure HTML/text email campaigns directly to all active user nodes in the network via Google Apps Script Proxy.
+              </p>
+
+              <form onSubmit={handleBroadcast} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-muted)' }}>CAMPAIGN SUBJECT</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Zylron AI v3.0 Release Update" 
+                    value={broadcastSubject}
+                    onChange={(e) => setBroadcastSubject(e.target.value)}
+                    style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px 15px', color: '#fff', fontSize: '14px' }}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '25px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-muted)' }}>HTML TEMPLATE BODY</label>
+                    <textarea 
+                      placeholder="<h3>Welcome to Zylron v3.0, {{name}}!</h3><p>We have introduced brand new B2B Developer APIs and support ticketing tools.</p>"
+                      value={broadcastHtml}
+                      onChange={(e) => setBroadcastHtml(e.target.value)}
+                      style={{ background: 'var(--bg-main)', border: '1px solid var(--border)', borderRadius: '10px', padding: '15px', color: '#fff', fontFamily: 'monospace', fontSize: '13px', minHeight: '220px', resize: 'vertical' }}
+                      required
+                    />
+                    <span style={{ fontSize: '11px', color: 'var(--primary)' }}>* Note: You can use template variable <strong>{`{{name}}`}</strong> to dynamically interpolate the user's registered name.</span>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--text-muted)' }}>LIVE EMAIL RENDER PREVIEW</label>
+                    <div style={{ 
+                      flex: 1, 
+                      background: '#0a0a0a', 
+                      border: '1px solid var(--border)', 
+                      borderRadius: '10px', 
+                      padding: '20px', 
+                      overflowY: 'auto', 
+                      color: '#fff', 
+                      fontFamily: 'sans-serif',
+                      fontSize: '14px',
+                      minHeight: '220px'
+                    }}>
+                      <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px', marginBottom: '15px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                        <strong>Subject:</strong> {broadcastSubject || '(No Subject)'}
+                      </div>
+                      <div dangerouslySetInnerHTML={{ __html: broadcastHtml.replace(/{{name}}/g, 'Root Administrator') || '<span style="color: #475569; font-style: italic;">HTML email campaign preview will render here dynamically...</span>' }} />
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isBroadcasting}
+                  style={{ 
+                    background: 'var(--primary)', 
+                    color: '#000', 
+                    border: 'none', 
+                    padding: '14px 28px', 
+                    borderRadius: '10px', 
+                    cursor: 'pointer', 
+                    fontWeight: 'bold', 
+                    fontSize: '14px',
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    alignSelf: 'flex-start',
+                    boxShadow: '0 0 15px rgba(6, 182, 212, 0.2)'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.filter = 'brightness(1.1)'}
+                  onMouseLeave={(e) => e.currentTarget.style.filter = 'brightness(1)'}
+                >
+                  {isBroadcasting ? 'Broadcasting...' : 'Launch Broadcast Campaign'}
+                </button>
+
+                {broadcastStatus && (
+                  <div style={{ 
+                    padding: '12px 18px', 
+                    background: broadcastStatus.includes('Error') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', 
+                    border: `1px solid ${broadcastStatus.includes('Error') ? 'rgba(239, 68, 68, 0.2)' : 'rgba(16, 185, 129, 0.2)'}`,
+                    color: broadcastStatus.includes('Error') ? 'var(--danger)' : 'var(--secondary)',
+                    borderRadius: '8px',
+                    fontSize: '13px',
+                    fontWeight: '500'
+                  }}>
+                    {broadcastStatus}
+                  </div>
+                )}
+              </form>
+            </section>
+          )}
         </div>
       </main>
+
+      {/* Analytics Modal */}
+      {selectedUserIdForAnalytics && (
+        <UserAnalyticsModal 
+          userId={selectedUserIdForAnalytics} 
+          onClose={() => setSelectedUserIdForAnalytics(null)} 
+        />
+      )}
     </div>
   );
 };

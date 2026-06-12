@@ -19,6 +19,12 @@ export const adminServices = {
     getStats: () => adminApi.get('/stats'),
     getUsers: () => adminApi.get('/users'),
     getLogs: () => adminApi.get('/logs'),
+    toggleBanUser: (id) => adminApi.put(`/users/${id}/ban`),
+    getTickets: () => adminApi.get('/tickets'),
+    resolveTicket: (id) => adminApi.put(`/tickets/${id}/resolve`),
+    broadcastMessage: (subject, htmlContent) => adminApi.post('/broadcast', { subject, htmlContent }),
+    getUserAnalytics: (id) => adminApi.get(`/users/${id}/analytics`),
+    toggleApiKeyStatus: (id) => adminApi.put(`/api-keys/${id}/toggle`),
 };
 
 export default adminApi;
