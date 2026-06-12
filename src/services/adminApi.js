@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://zylron-agent-ai.onrender.com/api';
+const API_BASE_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:5001/api'
+    : 'https://zylron-agent-ai.onrender.com/api';
 const ADMIN_API_URL = API_BASE_URL + '/admin';
 
 const getAuthHeader = () => {
