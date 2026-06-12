@@ -102,6 +102,36 @@ const AdminDashboard = () => {
     };
   }, [isLoggedIn]);
 
+  useEffect(() => {
+    if (isLoggedIn) {
+      const speakWelcome = () => {
+        const synth = window.speechSynthesis;
+        if (!synth) return;
+        
+        synth.cancel(); // Reset active speech
+        
+        const utterance = new SpeechSynthesisUtterance("Welcome back, Root Administrator. Systems are optimal.");
+        
+        // Try to load a clean English voice
+        const voices = synth.getVoices();
+        const techVoice = voices.find(v => v.name.includes('Google US English') || v.name.includes('Microsoft David') || v.lang === 'en-US');
+        if (techVoice) utterance.voice = techVoice;
+        utterance.pitch = 0.85; // Cinematic low pitch
+        utterance.rate = 0.95;  // Deliberate pace
+        
+        synth.speak(utterance);
+      };
+
+      // Speak when voices have loaded (Chrome requirement)
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = speakWelcome;
+      }
+      
+      const timer = setTimeout(speakWelcome, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoggedIn]);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
