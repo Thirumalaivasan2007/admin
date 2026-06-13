@@ -323,6 +323,7 @@ const AdminDashboard = () => {
           onClick={() => {
             localStorage.removeItem('user');
             setIsLoggedIn(false);
+            window.location.reload();
           }}
           style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', color: 'var(--danger)', background: 'transparent', border: 'none', cursor: 'pointer' }}
         >
